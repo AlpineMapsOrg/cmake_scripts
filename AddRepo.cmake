@@ -64,6 +64,7 @@ function(alp_add_git_repository name)
             ERROR_QUIET
             RESULT_VARIABLE GIT_LSREMOTE_RESULT
         )
+        string(REGEX MATCH "^[^/]+/.+" commitish_is_remote_branch "${PARAM_COMMITISH}")
 
         # First, see if PARAM_COMMITISH is a valid local ref at all:
         execute_process(
@@ -107,7 +108,7 @@ function(alp_add_git_repository name)
                 OUTPUT_STRIP_TRAILING_WHITESPACE
             )
 
-            if (GIT_HEAD_OUTPUT STREQUAL CHECK_COMMITISH)
+            if (GIT_HEAD_OUTPUT STREQUAL CHECK_COMMITISH AND NOT commitish_is_remote_branch)
                 message(STATUS "Repo in ${short_repo_dir} is already at ${PARAM_COMMITISH}. Skipping checkout.")
             else()
                 if (GIT_LSREMOTE_RESULT)
