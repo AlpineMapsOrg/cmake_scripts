@@ -30,13 +30,24 @@ if(NOT COMMAND alp_add_git_repository)
     include(${CMAKE_CURRENT_LIST_DIR}/AddRepo.cmake)
 endif()
 
+if(NOT DEFINED _alp_check_for_script_updates_repo_flag)
+    set_property(GLOBAL PROPERTY _alp_check_for_script_updates_repo_flag FALSE)
+endif()
+
 function(alp_check_for_script_updates script_path)
     get_filename_component(script_name "${script_path}" NAME)
 
-    alp_add_git_repository(cmake_scripts
-                           URL "git@github.com:AlpineMapsOrg/cmake_scripts.git"
-                           COMMITISH origin/main
-                           DO_NOT_ADD_SUBPROJECT PRIVATE_DO_NOT_CHECK_FOR_SCRIPT_UPDATES)
+    get_property(_repo_done GLOBAL PROPERTY _alp_check_for_script_updates_repo_flag)
+    if(_repo_done)
+        get_property(cmake_scripts_SOURCE_DIR GLOBAL PROPERTY _alp_check_for_script_updates_script_repo)
+    else()
+        alp_add_git_repository(cmake_scripts
+                               URL "git@github.com:AlpineMapsOrg/cmake_scripts.git"
+                               COMMITISH origin/main
+                               DO_NOT_ADD_SUBPROJECT PRIVATE_DO_NOT_CHECK_FOR_SCRIPT_UPDATES)
+        set_property(GLOBAL PROPERTY _alp_check_for_script_updates_repo_flag TRUE)
+        set_property(GLOBAL PROPERTY _alp_check_for_script_updates_script_repo ${cmake_scripts_SOURCE_DIR})
+    endif()
 
     set(external_script_path "${cmake_scripts_SOURCE_DIR}/${script_name}")
     get_filename_component(absolute_script_path "${script_path}" REALPATH)
