@@ -35,7 +35,7 @@ function(alp_check_for_script_updates script_path)
 
     alp_add_git_repository(cmake_scripts
                            URL "git@github.com:AlpineMapsOrg/cmake_scripts.git"
-                           COMMITISH main
+                           COMMITISH origin/main
                            DO_NOT_ADD_SUBPROJECT PRIVATE_DO_NOT_CHECK_FOR_SCRIPT_UPDATES)
 
     set(external_script_path "${cmake_scripts_SOURCE_DIR}/${script_name}")
