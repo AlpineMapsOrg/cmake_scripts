@@ -43,6 +43,10 @@ function(alp_add_git_repository name)
         set_property(GLOBAL PROPERTY _alp_add_repo_check_flag TRUE)
     endif()
 
+    if (NOT DEFINED ALP_EXTERN_DIR OR ALP_EXTERN_DIR STREQUAL "")
+        set(ALP_EXTERN_DIR extern)
+    endif()
+
     file(MAKE_DIRECTORY ${CMAKE_SOURCE_DIR}/${ALP_EXTERN_DIR} )
     set(repo_dir ${CMAKE_SOURCE_DIR}/${ALP_EXTERN_DIR}/${name})
     set(short_repo_dir ${ALP_EXTERN_DIR}/${name})
