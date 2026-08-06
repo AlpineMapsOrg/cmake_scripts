@@ -1,0 +1,49 @@
+name: AddRepo tests
+
+on:
+  push:
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  local-fixtures:
+    name: Local fixtures (CMake ${{ matrix.cmake-version }})
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        cmake-version: ['~3.25.0', 'latest']
+    steps:
+      - uses: actions/checkout@v4
+      - uses: lukka/get-cmake@latest
+        with:
+          cmakeVersion: ${{ matrix.cmake-version }}
+      - name: Configure Git identity
+        run: |
+          git config --global user.name "AddRepo CI"
+          git config --global user.email "addrepo-ci@example.invalid"
+      - name: Run hermetic AddRepo tests
+        run: python3 tests/AddRepo/run_tests.py
+
+  github-transport:
+    name: GitHub shallow transport
+    if: github.event_name == 'workflow_dispatch'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: lukka/get-cmake@latest
+        with:
+          cmakeVersion: latest
+      - name: Configure fixture repository SSH key
+        env:
+          ADDREPO_TEST_SSH_KEY: ${{ secrets.ADDREPO_TEST_SSH_KEY }}
+        run: |
+          install -d -m 700 ~/.ssh
+          printf '%s\n' "$ADDREPO_TEST_SSH_KEY" > ~/.ssh/id_ed25519
+          chmod 600 ~/.ssh/id_ed25519
+          ssh-keyscan github.com >> ~/.ssh/known_hosts
+      - name: Run GitHub transport test
+        run: python3 tests/AddRepo/github_transport.py
