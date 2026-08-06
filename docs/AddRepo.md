@@ -65,7 +65,7 @@ The implementation currently does the following:
    `ALP_EXTERN_DIR` defaults to `extern`. `DESTINATION_PATH` replaces this
    relative path.
 4. Creates the destination directory and clones into it if `.git` is absent.
-5. Uses shallow clones by default and full clones with the obsolete `DEEP_CLONE` argument.
+5. Uses shallow clones by default and full clones with the (now removed) `DEEP_CLONE` argument.
 6. Treats a `COMMITISH` containing a slash, such as `origin/main`, as a moving
    remote ref that must be fetched. This behavior is obsolete and should be removed.
    Only commitish starting with origin/ should be treated as remote tracking.
@@ -125,13 +125,13 @@ An empty repository must be cloned using the given `URL` as `origin` (see R6), a
 given `COMMITISH` must be checked out. It then becomes a cmake managed repository.
 
 For cmake managed repositories, the `origin` URL must exist and match the supplied
-`URL` argument exactly. The repository must be clean. Otherwise the function fails
-fatally with a clear message (including the suggestion to make it a developer repo
-by making it attached).
+`URL` argument exactly. The repository must be clean (no untracked files, ignored
+files are ok). Otherwise the function fails fatally with a clear message (including
+the suggestion to make it a developer repo by making it attached).
 
 If the script encounters a developer managed repository, it produces a meaningful
 warning. The message must make it unambiguous that the requested revision was not
-checked out, and including the realtive destination path. No fetch is needed merely
+checked out, and including the relative destination path. No fetch is needed merely
 to discover that `HEAD` is attached. All other git commands are skipped.
 Developer repositories are an exception to R4-R8.
 
@@ -150,7 +150,8 @@ The behavior depends on the requested revision:
    whose name begins with `origin/` cannot be requested through this interface.
 
 No other revision class is accepted. In particular, `COMMITISH` never means
-a local branch. Revision classification must occur before deciding whether a
+a local branch. The implementation may produce an error, if `COMMITISH` resolves
+to a local branch name. Revision classification must occur before deciding whether a
 fetch is required. A locally cached `origin/<branch>` ref remains a moving
 revision, not a fixed revision merely because it resolves locally.
 
@@ -171,8 +172,8 @@ revision, not a fixed revision merely because it resolves locally.
 4. If a fixed revision is missing locally, the function must fetch (R6.2).
 5. An explicit remote-tracking revision should be fetched on every invocation.
    If the fetch fails, but the requested remote-tracking ref resolves locally,
-   the function must warn and continue using that cached commit (fallback).
-   If the ref does not resolve locally, the failure must be fatal.
+   the function must produce a warning. In either case, HEAD must be updated to
+   the newest local ref. If the ref does not resolve locally, the failure must be fatal.
 6. A new clone necessarily requires access to `URL`.
 7. The CMake-script self-update check is not part of the offline guarantee above.
 
@@ -182,7 +183,7 @@ revision, not a fixed revision merely because it resolves locally.
    where supported by Git and the remote.
 2. If a fetch is necessary, it should only download the minimum number of objects
    needed to resolve the specified commitish. This also applies to submodules.
-3. Failure to check out requested fixed revisions (including submodules) is fatal.
+3. Failure to check out the requested fixed revisions (including submodules) is fatal.
    
 ### R7. Recursive submodules
 
@@ -194,7 +195,7 @@ revision, not a fixed revision merely because it resolves locally.
 3. Submodule URLs must be synchronized before update so changes in `.gitmodules`
    take effect.
 4. R5.2, and R6.2 apply.
-6. A failure to reach the recorded recursive submodule state produces clear fatal
+5. A failure to reach the recorded recursive submodule state produces clear fatal
    error message.
 
 ### R8. Postconditions
@@ -202,7 +203,7 @@ revision, not a fixed revision merely because it resolves locally.
 These apply only to cmake managed repositories. These must be checked in the
 unit tests, but verification during execution may be skipped.
 
-1. Outside the remote-tracking fallback in R4.5, successful return means the repository's
+1. Outside the remote-tracking fallback (R5.5), successful return means the repository's
    `HEAD` is at the commit selected by `COMMITISH`.
 2. The `HEAD` is detached.
 3. All submodules have the version specified in their parent.
@@ -210,7 +211,7 @@ unit tests, but verification during execution may be skipped.
 
 Git failures that prevent the required postcondition must cause configuration to fail.
 
-### R10. Adding the CMake subproject
+### R9. Adding the CMake subproject
 
 1. By default, the prepared repository must be added with a binary directory of
    `${CMAKE_BINARY_DIR}/alp_external/<name>`.
@@ -223,6 +224,9 @@ Git failures that prevent the required postcondition must cause configuration to
    R3-R8.
 
 ### R10. Script update check
+
+The check works by updating to an orign/main ref, which attempts the fetch,
+but only produces a warning if there is no internet.
 
 1. At most one AddRepo self-update check may run per CMake process.
 2. The check must not recurse indefinitely when it uses
@@ -242,18 +246,22 @@ Git failures that prevent the required postcondition must cause configuration to
    destination is unsupported.
 3. Status output should distinguish clone, fetch, checkout, submodule update,
    already-correct/offline reuse, and protected-developer-checkout decisions.
-5. All messages (status, warning, error..) must include the name of the dependency.
-6. Error messages must identify the dependency, working dir, operation, requested revision,
+4. All messages (status, warning, error..) must include the name of the dependency.
+5. Error messages must identify the dependency, working dir, operation, requested revision,
    and relevant Git diagnostic.
-7. Errors are generally fatal.
+6. Errors are generally fatal.
 
 ## Acceptance scenarios
 
-The corrected test suite may use temporary local Git repositories for core
-behavior. Tests that exercise real network transport may use any repository on
+The corrected test suite should use temporary local Git repositories wherever possible.
+Tests that exercise real network transport may use any repository on
 github, but should prefer repositories inside the AlpineMapsOrg organisation.
 
-For each test, rostconditions (R8) must be tested. When it says fixed revision, test all 3 types (leightweight tag, annotated tag, and commit id sha).
+For each test, postconditions (R8) must be tested after every successful CMake-managed preparation.
+When it says fixed revision, test all 3 types (lightweight tag, annotated tag, and commit id sha).
+The test repository linked below can be used for unit tests (it's ok to push new revisions during a testrun). At the beginning of the unit test, the repo should be reset to a defined state (force pushing there is ok). Github supports shallow clones, capability to support shallow clones and fetches must be demonstrated by the unit tests. If shallow clones are later ignored by a certain setup, that's ok.
+
+Test repository: git@github.com:AlpineMapsOrgDependencies/cmake_repo_for_tests.git
 
 At minimum, tests must cover:
 
@@ -262,7 +270,7 @@ At minimum, tests must cover:
 - Fresh clones, same revision types, with submodules, one of the submodules is unavailable (verify this is rejected with an error).
 - On second run, with the same fixed-revision types (verify nothing is fetched, works offline).
 - On second run, with the same fixed-revision types, with submodules (verify nothing is fetched, works offline).
-- On second run, with the same fixed-revision types, with submodules, deliberately delete a submodule (verify it is fixed).
+- On second run, with the same fixed-revision types, with submodules, deliberately delete a submodule (verify either an error is produced because the repo is dirty, or it is fixed).
 - On second run, verify that a dirty repository is rejected with an error.
 - On second run, with a remote-tracking revision (verify the remote is fetched).
 - On second run, with a remote-tracking revision, offline fallback (works offline, verify there is no fatal error).
@@ -271,7 +279,7 @@ At minimum, tests must cover:
 - Update an existing repo with submodules to a fixed revision, the revision must be fetched (verify the repo and submodules did not gain full history).
 - Update an existing repo with submodules to a fixed revision, the revision is already present (verify nothing is fetched and works offline).
 - Update an existing repo with submodules to a fixed revision, the new revision updates to an invalid submodule (verify it is rejected with an error).
-- Update an existing repo with attached HEAD (verify no git commands are issued, a warning is printed, works offline).
+- Update an existing repo with attached HEAD (verify no git commands beside the check for attachment are issued, a warning is printed, works offline).
 - `DESTINATION_PATH`, the default `ALP_EXTERN_DIR`, `DO_NOT_ADD_SUBPROJECT`, `NOT_SYSTEM`, and `<name>_SOURCE_DIR` behave as documented.
 - Absolute or escaping destination paths, an existing non-Git directory, and a repository with a mismatched `origin` fail without data loss.
 - That tags containing slashes remain fixed revisions, `origin/<branch>` is always moving, and unsupported revision forms fail clearly.
