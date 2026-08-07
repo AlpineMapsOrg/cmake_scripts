@@ -15,7 +15,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        cmake-version: ['~3.25.0', 'latest']
+        cmake-version: ['~3.25.0', '3.31.6', 'latest']
     steps:
       - uses: actions/checkout@v4
       - uses: lukka/get-cmake@latest
