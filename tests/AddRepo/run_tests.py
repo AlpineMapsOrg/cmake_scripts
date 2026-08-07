@@ -294,7 +294,7 @@ def test_remote_tracking_fallback(root: Path, fixture):
     try:
         result = configure_project(source, root / "moving-build-3", fixture["url"],
                                    "origin/main", options=("DO_NOT_ADD_SUBPROJECT",))
-        assert "reusing cached commit" in result.stdout
+        assert "reusing cached commit" in " ".join(result.stdout.split())
         assert_managed(repo, fixture["tip"], shallow=True, submodules=True)
     finally:
         remote_off.rename(fixture["remote"])
