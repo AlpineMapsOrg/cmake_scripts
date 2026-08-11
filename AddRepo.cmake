@@ -168,6 +168,23 @@ function(_alp_add_repo_prepare_submodules name repo_dir revision checkout_perfor
             _alp_add_repo_fail("${name}" "${repo_dir}" "${revision}"
                 "updating recursive submodules" "${_error}${_output}")
         endif()
+
+        # A failed --no-fetch pass can leave shallow submodules checked out at
+        # commits other than the gitlinks recorded by their parents.  Once the
+        # fallback has fetched every missing object, converge all worktrees
+        # from local objects before checking the repository postconditions.
+        message(STATUS "[alp/git] ${name}: finalizing recursive submodules from local objects in '${repo_dir}'.")
+        execute_process(
+            COMMAND "${GIT_EXECUTABLE}" -c protocol.file.allow=always submodule update
+                --init --recursive --checkout --force --depth 1 --no-fetch
+            WORKING_DIRECTORY "${repo_dir}"
+            RESULT_VARIABLE _finalize_result
+            OUTPUT_VARIABLE _output
+            ERROR_VARIABLE _error)
+        if(NOT _finalize_result EQUAL 0)
+            _alp_add_repo_fail("${name}" "${repo_dir}" "${revision}"
+                "finalizing recursive submodules" "${_error}${_output}")
+        endif()
     endif()
 endfunction()
 

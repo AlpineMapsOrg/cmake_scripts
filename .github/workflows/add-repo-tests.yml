@@ -66,3 +66,5 @@ jobs:
         run: python3 tests/AddRepo/run_tests.py
       - name: Run GitHub transport test
         run: python3 tests/AddRepo/github_transport.py
+      - name: Clone and verify Boost repository
+        run: python3 tests/AddRepo/boost_repository.py
