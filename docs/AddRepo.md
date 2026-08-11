@@ -54,6 +54,12 @@ alp_add_git_repository(glm
 On return, `<name>_SOURCE_DIR` is set in the caller's scope to the absolute
 repository path.
 
+### Cache variables
+
+`ALP_GIT_SUBMODULE_JOBS` controls the maximum number of parallel submodule
+clone jobs passed to `git submodule update`. It must be a positive integer and
+defaults to `8`.
+
 ## Current behavior
 
 The implementation currently does the following:

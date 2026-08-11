@@ -18,6 +18,14 @@
 
 include_guard(GLOBAL)
 
+set(ALP_GIT_SUBMODULE_JOBS "8" CACHE STRING
+    "Maximum number of parallel Git submodule clone jobs")
+if(NOT ALP_GIT_SUBMODULE_JOBS MATCHES "^[1-9][0-9]*$")
+    message(FATAL_ERROR
+        "[alp/git] ALP_GIT_SUBMODULE_JOBS must be a positive integer; "
+        "got '${ALP_GIT_SUBMODULE_JOBS}'.")
+endif()
+
 function(_alp_add_repo_fail name repo_dir revision operation diagnostic)
     string(STRIP "${diagnostic}" _diagnostic)
     if(_diagnostic STREQUAL "")
@@ -149,7 +157,8 @@ function(_alp_add_repo_prepare_submodules name repo_dir revision checkout_perfor
     message(STATUS "[alp/git] ${name}: updating recursive submodules from local objects in '${repo_dir}'.")
     execute_process(
         COMMAND "${GIT_EXECUTABLE}" -c protocol.file.allow=always submodule update
-            --init --recursive --checkout --depth 1 --no-fetch
+            --init --recursive --checkout --depth 1
+            --jobs "${ALP_GIT_SUBMODULE_JOBS}" --no-fetch
         WORKING_DIRECTORY "${repo_dir}"
         RESULT_VARIABLE _local_result
         OUTPUT_VARIABLE _output
@@ -159,7 +168,8 @@ function(_alp_add_repo_prepare_submodules name repo_dir revision checkout_perfor
         message(STATUS "[alp/git] ${name}: fetching missing recursive submodule revisions in '${repo_dir}'.")
         execute_process(
             COMMAND "${GIT_EXECUTABLE}" -c protocol.file.allow=always submodule update
-                --init --recursive --checkout --depth 1
+                --init --recursive --checkout --force --depth 1
+                --jobs "${ALP_GIT_SUBMODULE_JOBS}"
             WORKING_DIRECTORY "${repo_dir}"
             RESULT_VARIABLE _update_result
             OUTPUT_VARIABLE _output

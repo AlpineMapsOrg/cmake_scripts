@@ -10,17 +10,46 @@ permissions:
 
 jobs:
   unit-tests:
-    name: Unit tests (CMake ${{ matrix.cmake-version }})
+    name: Unit tests (CMake ${{ matrix.cmake-version }}, Git ${{ matrix.git-version }})
     runs-on: ubuntu-latest
     strategy:
       fail-fast: false
       matrix:
         cmake-version: ['~3.25.0', '3.31.6', 'latest']
+        git-version: ['system', '2.51.0']
     steps:
       - uses: actions/checkout@v6
       - uses: lukka/get-cmake@latest
         with:
           cmakeVersion: ${{ matrix.cmake-version }}
+      - name: Install Git ${{ matrix.git-version }}
+        if: matrix.git-version != 'system'
+        env:
+          GIT_VERSION: ${{ matrix.git-version }}
+        run: |
+          sudo apt-get update
+          sudo apt-get install --yes libcurl4-openssl-dev libexpat1-dev libssl-dev zlib1g-dev
+          curl --fail --silent --show-error --location \
+            "https://www.kernel.org/pub/software/scm/git/git-${GIT_VERSION}.tar.xz" \
+            --output /tmp/git.tar.xz
+          tar --extract --file=/tmp/git.tar.xz --directory=/tmp
+          make --directory="/tmp/git-${GIT_VERSION}" \
+            prefix="/opt/git-${GIT_VERSION}" \
+            NO_GETTEXT=YesPlease NO_TCLTK=YesPlease \
+            --jobs=2 all
+          sudo make --directory="/tmp/git-${GIT_VERSION}" \
+            prefix="/opt/git-${GIT_VERSION}" \
+            NO_GETTEXT=YesPlease NO_TCLTK=YesPlease \
+            install
+          echo "/opt/git-${GIT_VERSION}/bin" >> "$GITHUB_PATH"
+      - name: Verify Git version
+        env:
+          EXPECTED_GIT_VERSION: ${{ matrix.git-version }}
+        run: |
+          git --version
+          if [ "$EXPECTED_GIT_VERSION" != system ]; then
+            test "$(git --version)" = "git version $EXPECTED_GIT_VERSION"
+          fi
       - name: Configure Git identity
         run: |
           git config --global user.name "AddRepo CI"
@@ -37,3 +66,5 @@ jobs:
         run: python3 tests/AddRepo/run_tests.py
       - name: Run GitHub transport test
         run: python3 tests/AddRepo/github_transport.py
+      - name: Clone and verify Boost repository
+        run: python3 tests/AddRepo/boost_repository.py

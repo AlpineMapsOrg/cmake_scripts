@@ -396,6 +396,17 @@ file(WRITE "${{CMAKE_BINARY_DIR}}/source-dir.txt" "${{default_dep_SOURCE_DIR}}")
 
 
 def test_parser_and_revision_failures(root: Path, fixture):
+    invalid_jobs_source = root / "invalid-jobs-source"
+    write(invalid_jobs_source / "CMakeLists.txt", f"""cmake_minimum_required(VERSION 3.25)
+project(invalid_submodule_jobs NONE)
+include([==[{ADD_REPO}]==])
+""")
+    result = run(("cmake", "-S", invalid_jobs_source,
+                  "-B", root / "invalid-jobs-build",
+                  "-DALP_GIT_SUBMODULE_JOBS=0"), check=False)
+    assert result.returncode != 0, result.stdout
+    assert "ALP_GIT_SUBMODULE_JOBS must be a positive integer" in result.stdout
+
     source = root / "parser-source"
     result = configure_project(source, root / "parser-build", fixture["url"], "lightweight",
                                options=("DO_NOT_ADD_SUBPROJECT", "BOGUS_OPTION"), expect_ok=False)
