@@ -3,7 +3,6 @@
 
 from __future__ import annotations
 
-import os
 from pathlib import Path
 import subprocess
 import tempfile
@@ -73,13 +72,7 @@ alp_add_git_repository(boost
     PRIVATE_DO_NOT_CHECK_FOR_SCRIPT_UPDATES)
 """, encoding="utf-8")
 
-        cmake_env = os.environ.copy()
-        config_count = int(cmake_env.get("GIT_CONFIG_COUNT", "0"))
-        cmake_env["GIT_CONFIG_COUNT"] = str(config_count + 1)
-        cmake_env[f"GIT_CONFIG_KEY_{config_count}"] = "submodule.fetchJobs"
-        cmake_env[f"GIT_CONFIG_VALUE_{config_count}"] = "8"
-        subprocess.run(
-            ("cmake", "-S", source, "-B", build), check=True, env=cmake_env)
+        subprocess.run(("cmake", "-S", source, "-B", build), check=True)
         repo = source / "extern" / "boost"
 
         head = git(repo, "rev-parse", "HEAD").stdout.strip()
