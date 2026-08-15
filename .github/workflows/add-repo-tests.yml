@@ -1,4 +1,4 @@
-name: AddRepo tests
+name: CMake helper tests
 
 on:
   push:
@@ -68,3 +68,20 @@ jobs:
         run: python3 tests/AddRepo/github_transport.py
       - name: Clone and verify Boost repository
         run: python3 tests/AddRepo/boost_repository.py
+      - name: Run SetupCMakeProject tests
+        run: cmake -P test_SetupCMakeProject.cmake
+
+  setup-cmake-project-platforms:
+    name: SetupCMakeProject (${{ matrix.os }})
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, macos-latest, windows-latest]
+    steps:
+      - uses: actions/checkout@v6
+      - uses: lukka/get-cmake@latest
+        with:
+          cmakeVersion: latest
+      - name: Run SetupCMakeProject tests
+        run: cmake -P test_SetupCMakeProject.cmake
