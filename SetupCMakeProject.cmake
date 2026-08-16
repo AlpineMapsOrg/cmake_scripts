@@ -28,6 +28,15 @@ endif()
 
 alp_check_for_script_updates("${CMAKE_CURRENT_LIST_FILE}")
 
+set(ALP_DEPENDENCIES_N_BUILD_JOBS "" CACHE STRING
+    "Maximum number of parallel jobs for independently built CMake dependencies")
+if(NOT ALP_DEPENDENCIES_N_BUILD_JOBS STREQUAL ""
+        AND NOT ALP_DEPENDENCIES_N_BUILD_JOBS MATCHES "^[1-9][0-9]*$")
+    message(FATAL_ERROR
+        "[alp] ALP_DEPENDENCIES_N_BUILD_JOBS must be empty or a positive integer; "
+        "got '${ALP_DEPENDENCIES_N_BUILD_JOBS}'.")
+endif()
+
 macro(_alp_append_cache_arg out var type)
     if(DEFINED ${var} AND NOT "${${var}}" STREQUAL "")
         set(_alp_cache_value "${${var}}")
@@ -45,6 +54,14 @@ macro(_alp_append_key_value out var)
         unset(_alp_key_value)
     endif()
 endmacro()
+
+function(_alp_cmake_project_parallel_args output_var)
+    set(_parallel_args --parallel)
+    if(NOT ALP_DEPENDENCIES_N_BUILD_JOBS STREQUAL "")
+        list(APPEND _parallel_args "${ALP_DEPENDENCIES_N_BUILD_JOBS}")
+    endif()
+    set("${output_var}" "${_parallel_args}" PARENT_SCOPE)
+endfunction()
 
 set(_ALP_CMAKE_PROJECT_FORWARD_VARS
     CMAKE_TOOLCHAIN_FILE
@@ -150,12 +167,19 @@ function(_alp_build_and_install_cmake_project NAME SRC_DIR BUILD_DIR INSTALL_DIR
         message(FATAL_ERROR "[alp] Configuring ${NAME} failed!")
     endif()
 
-    message(STATUS "[alp] Building + installing ${NAME}")
+    _alp_cmake_project_parallel_args(_parallel_args)
+    if(ALP_DEPENDENCIES_N_BUILD_JOBS STREQUAL "")
+        message(STATUS "[alp] Building + installing ${NAME}")
+    else()
+        message(STATUS
+            "[alp] Building + installing ${NAME} "
+            "(parallel jobs: ${ALP_DEPENDENCIES_N_BUILD_JOBS})")
+    endif()
     execute_process(
         COMMAND "${CMAKE_COMMAND}"
                 --build "${BUILD_DIR}"
                 --config "${BUILD_CONFIG}"
-                --parallel
+                ${_parallel_args}
                 --target install
         RESULT_VARIABLE _bld_res)
 

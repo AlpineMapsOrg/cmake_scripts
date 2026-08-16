@@ -62,6 +62,8 @@ function(alp_check_for_script_updates)
 endfunction()
 
 include("@SETUP_SCRIPT@")
+_alp_cmake_project_parallel_args(_parallel_args)
+file(WRITE "${CMAKE_CURRENT_BINARY_DIR}/parallel-args.txt" "${_parallel_args}")
 set(ALP_SANITIZER_FLAGS -fsanitize=undefined -fno-omit-frame-pointer)
 alp_setup_cmake_project_from_source(fixture
     SOURCE_DIR "@FIXTURE_SOURCE@"
@@ -155,10 +157,10 @@ find_program(_ninja ninja REQUIRED)
 
 function(_run_configure source_dir build_dir output_var)
     set(options EXPECT_FAILURE)
-    set(oneValueArgs GENERATOR URL SHA256 SIGNATURE VALUE FAIL_IF_GIT_CALLED EXTERN_DIR)
+    set(oneValueArgs GENERATOR URL SHA256 SIGNATURE VALUE FAIL_IF_GIT_CALLED EXTERN_DIR JOBS)
     cmake_parse_arguments(PARSE_ARGV 3 arg "${options}" "${oneValueArgs}" "")
 
-    foreach(_optional URL SHA256 SIGNATURE VALUE FAIL_IF_GIT_CALLED EXTERN_DIR)
+    foreach(_optional URL SHA256 SIGNATURE VALUE FAIL_IF_GIT_CALLED EXTERN_DIR JOBS)
         if(NOT DEFINED arg_${_optional})
             set(arg_${_optional} "")
         endif()
@@ -175,6 +177,7 @@ function(_run_configure source_dir build_dir output_var)
             "-DFIXTURE_VALUE:STRING=${arg_VALUE}"
             "-DFAIL_IF_GIT_CALLED:BOOL=${arg_FAIL_IF_GIT_CALLED}"
             "-DALP_EXTERN_DIR:STRING=${arg_EXTERN_DIR}"
+            "-DALP_DEPENDENCIES_N_BUILD_JOBS:STRING=${arg_JOBS}"
             "-DCMAKE_PREFIX_PATH:PATH=/prefix/one;/prefix/two"
             "-DCMAKE_C_FLAGS:STRING=-DOUTER_C"
             "-DCMAKE_CXX_FLAGS:STRING=-DOUTER_CXX"
@@ -196,7 +199,7 @@ endfunction()
 
 function(_configure generator source_dir build_dir output_var)
     set(options EXPECT_FAILURE)
-    set(oneValueArgs URL SHA256 SIGNATURE VALUE FAIL_IF_GIT_CALLED EXTERN_DIR)
+    set(oneValueArgs URL SHA256 SIGNATURE VALUE FAIL_IF_GIT_CALLED EXTERN_DIR JOBS)
     cmake_parse_arguments(PARSE_ARGV 4 arg "${options}" "${oneValueArgs}" "")
 
     set(_failure_arg)
@@ -204,7 +207,7 @@ function(_configure generator source_dir build_dir output_var)
         set(_failure_arg EXPECT_FAILURE)
     endif()
     set(_configure_args ${_failure_arg} GENERATOR "${generator}")
-    foreach(_optional URL SHA256 SIGNATURE VALUE FAIL_IF_GIT_CALLED EXTERN_DIR)
+    foreach(_optional URL SHA256 SIGNATURE VALUE FAIL_IF_GIT_CALLED EXTERN_DIR JOBS)
         if(DEFINED arg_${_optional})
             list(APPEND _configure_args ${_optional} "${arg_${_optional}}")
         endif()
@@ -224,6 +227,16 @@ function(_assert_file_contains path expected)
     endif()
 endfunction()
 
+function(_assert_file_equals path expected)
+    if(NOT EXISTS "${path}")
+        message(FATAL_ERROR "Expected file does not exist: ${path}")
+    endif()
+    file(READ "${path}" _content)
+    if(NOT _content STREQUAL expected)
+        message(FATAL_ERROR "Expected '${expected}' in ${path}, got '${_content}'")
+    endif()
+endfunction()
+
 function(_assert_contains content expected)
     string(FIND "${content}" "${expected}" _position)
     if(_position EQUAL -1)
@@ -239,7 +252,7 @@ endfunction()
 # Direct source setup, forwarding, active-cache reuse, and invalidation.
 set(_source_build "${_test_root}/source-single")
 _configure("Ninja" "${_source_outer}" "${_source_build}" _output
-    SIGNATURE source-one VALUE one)
+    SIGNATURE source-one VALUE one JOBS 2)
 set(_source_child_build "${_source_build}/alp_external/fixture_build")
 set(_source_install "${_source_build}/alp_external/fixture")
 _assert_file_contains("${_source_install}/forwarded.txt" "CMAKE_BUILD_TYPE=Release")
@@ -253,6 +266,8 @@ _assert_file_contains("${_source_install}/forwarded.txt"
 _assert_file_contains("${_source_install}/forwarded.txt"
     "FIXTURE_LIST=graph;multiprecision;heap;format;logic")
 _assert_file_contains("${_source_build}/exported-install-dir.txt" "${_source_install}")
+_assert_file_equals("${_source_build}/parallel-args.txt" "--parallel;2")
+_assert_contains("${_output}" "Building + installing fixture (parallel jobs: 2)")
 if(NOT EXISTS "${_source_install}/.alp_install_signature")
     message(FATAL_ERROR "The installed dependency has no persistent cache signature")
 endif()
@@ -260,8 +275,9 @@ endif()
 file(WRITE "${_source_child_build}/cache-hit-marker" "keep")
 file(WRITE "${_source_install}/cache-hit-marker" "keep")
 _configure("Ninja" "${_source_outer}" "${_source_build}" _output
-    SIGNATURE source-one VALUE one)
+    SIGNATURE source-one VALUE one JOBS 3)
 _assert_contains("${_output}" "[alp] Using cached install for fixture")
+_assert_file_equals("${_source_build}/parallel-args.txt" "--parallel;3")
 if(NOT EXISTS "${_source_child_build}/cache-hit-marker"
         OR NOT EXISTS "${_source_install}/cache-hit-marker")
     message(FATAL_ERROR "An active-cache hit removed the child build or install directory")
@@ -291,6 +307,7 @@ _assert_file_contains("${_source_install}/forwarded.txt" "FIXTURE_VALUE=two")
 set(_multi_build "${_test_root}/source-multi")
 _configure("Ninja Multi-Config" "${_source_outer}" "${_multi_build}" _output
     SIGNATURE source-multi VALUE multi)
+_assert_file_equals("${_multi_build}/parallel-args.txt" "--parallel")
 _assert_file_contains("${_multi_build}/alp_external/fixture/forwarded.txt"
     "CMAKE_CONFIGURATION_TYPES=")
 _assert_file_contains("${_multi_build}/alp_external/fixture/forwarded.txt"
@@ -395,6 +412,13 @@ _assert_contains("${_output}" "ALP_EXTERN_DIR '../escape' escapes")
 _configure("Ninja" "${_source_outer}" "${_test_root}/source-missing-signature" _output
     EXPECT_FAILURE VALUE bad)
 _assert_contains("${_output}" "alp_setup_cmake_project_from_source() needs")
+
+foreach(_invalid_jobs 0 -1 invalid)
+    _configure("Ninja" "${_source_outer}" "${_test_root}/invalid-jobs-${_invalid_jobs}"
+        _output EXPECT_FAILURE SIGNATURE invalid-jobs VALUE bad JOBS "${_invalid_jobs}")
+    _assert_contains("${_output}"
+        "ALP_DEPENDENCIES_N_BUILD_JOBS must be empty or a positive integer")
+endforeach()
 
 file(REMOVE_RECURSE "${_test_root}")
 message(STATUS "SetupCMakeProject tests passed")
